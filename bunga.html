@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Untuk kamu</title>
+<style>
+  :root { color-scheme: dark; --bg: #02020a; --hint: #5d5d78; box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #hint { position: fixed; left: 0; right: 0; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    text-align: center; font: 12px system-ui, sans-serif; color: var(--hint); pointer-events: none; }
+  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); color: #ffd9e6; font: 18px system-ui, sans-serif; letter-spacing: 0.08em; cursor: pointer; z-index: 5; }
+  #noteBtn { position: fixed; right: 14px; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); width: 48px; height: 48px; border-radius: 50%; border: 0; background: #ffe9a8; font-size: 22px; box-shadow: 0 4px 14px rgba(0,0,0,.5); cursor: pointer; z-index: 4; opacity: 0; pointer-events: none; transition: opacity 1s; }
+  #noteBtn.show { opacity: 1; pointer-events: auto; animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-4px) rotate(-6deg); } }
+  #note { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(2,2,10,.55); z-index: 6; padding: 20px; box-sizing: border-box; }
+  #note.hide { display: none; }
+  .paper { position: relative; width: min(320px, 100%); min-height: 250px; padding: 30px 24px 18px; box-sizing: border-box; color: #3a2f1e; background: repeating-linear-gradient(#fff6d6 0 29px, #e9d9a6 29px 30px); border-radius: 3px; transform: rotate(-1.5deg); box-shadow: 0 12px 36px rgba(0,0,0,.6); font-family: 'Caveat', 'Comic Sans MS', cursive; font-size: 24px; line-height: 30px; display: flex; flex-direction: column; }
+  .paper::before { content: ''; position: absolute; top: -10px; left: 50%; width: 70px; height: 20px; margin-left: -35px; background: rgba(255,160,190,.7); transform: rotate(3deg); }
+  #ntxt { flex: 1; }
+  .nav { display: flex; align-items: center; justify-content: space-between; font-size: 18px; margin-top: 10px; }
+  .nav button { border: 0; background: none; font-size: 30px; color: #8a6d2f; cursor: pointer; padding: 0 10px; }
+  #nx { position: absolute; top: 2px; right: 6px; border: 0; background: none; font-size: 26px; color: #8a6d2f; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<audio id="bgm" src="lagu.mp3" loop preload="auto"></audio>
+<button id="noteBtn" aria-label="Buka catatan">💌</button>
+<div id="note" class="hide"><div class="paper"><button id="nx" aria-label="Tutup">×</button><div id="ntxt"></div><div class="nav"><button id="np" aria-label="Sebelumnya">‹</button><span id="ni"></span><button id="nn" aria-label="Berikutnya">›</button></div></div></div>
+<div id="start">Ketuk untuk melihat ♥</div>
+<div id="hint">Ketuk layar untuk mengulang</div>
+<script>
+(function () {
+  var cv = document.getElementById("c"), ctx = cv.getContext("2d");
+  var W, H, dpr, fs, cw, ch, cols, rows, U, cx, cy, stars = [], sparks = [], sb, sch;
+  var seed = 11;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+  function hash(a, b) { var h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return h - Math.floor(h); }
+  function cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function ease(x) { return 1 - (1 - x) * (1 - x); }
+  function ease3(x) { return 1 - Math.pow(1 - x, 3); }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    fs = Math.max(7, Math.min(13, W / 50)); cw = fs * 0.6; ch = fs * 1.05;
+    cols = Math.floor(W / cw); rows = Math.floor(H / ch);
+    U = Math.min(W * 0.36, H * 0.26); cx = W / 2; cy = H * 0.36;
+    sb = new Float32Array(cols * rows); sch = new Array(cols * rows);
+    seed = 11; stars = []; var i;
+    for (i = 0; i < Math.floor(cols * rows / 45); i++)
+      stars.push({ c: Math.floor(rnd() * cols), r: Math.floor(rnd() * rows), p: rnd() * 6.28, s: 0.6 + rnd() * 1.6, k: rnd() });
+    sparks = [];
+    for (i = 0; i < 7; i++)
+      sparks.push({ c: Math.floor(rnd() * (cols - 8)) + 4, r: Math.floor(rnd() * (rows - 8)) + 4, p: rnd() * 6.28, s: 0.5 + rnd() * 0.9 });
+  }
+  addEventListener("resize", resize); resize();
+
+  var ROSES = [
+    [0, -0.6, 0.40, 0], [-0.55, -0.42, 0.37, 1], [0.55, -0.42, 0.37, 0], [-0.3, -0.12, 0.38, 0],
+    [0.3, -0.1, 0.38, 1], [-0.85, -0.05, 0.30, 0], [0.85, -0.05, 0.30, 1], [0, 0.2, 0.36, 1],
+    [-0.55, 0.3, 0.30, 0], [0.55, 0.3, 0.30, 0], [-0.2, -0.82, 0.26, 1], [0.25, -0.8, 0.26, 0]
+  ];
+  var PAL = [[215, 25, 55], [238, 125, 165]];
+  var LEAVES = [[-0.95, 0.4, -0.6], [0.95, 0.4, 0.6], [-0.75, 0.75, -0.9], [0.75, 0.75, 0.9], [-1.05, 0.0, -0.3], [1.05, 0.0, 0.3]];
+  var RAMP = ".:-+*oO80B&$@", GREEN = "/|\\{}[]rt<>";
+  var sc, sR, sG, sB;
+
+  function scene(c, r, xu, yu, t, hY, ph) {
+    var i, g, dx, dy, d2, d, th, s, b, m, pal, rr, k;
+    sc = null;
+    for (i = ROSES.length - 1; i >= 0; i--) {
+      k = ROSES[i]; g = cl((t - (3 + i * 0.45)) / 1.5, 0, 1); if (g <= 0) continue;
+      g = ease3(g); rr = k[2] * g; dx = xu - k[0]; dy = yu - k[1]; d2 = dx * dx + dy * dy;
+      if (d2 > rr * rr) continue;
+      d = Math.sqrt(d2) / rr; th = Math.atan2(dy, dx);
+      s = 0.5 + 0.5 * Math.sin(2 * th + 9 * d - ph + i);
+      b = d > 0.88 ? 0.16 + hash(c, r) * 0.1 : 0.28 + 0.62 * s * (1 - 0.35 * d);
+      b = cl(b + (hash(c + 3, r) - 0.5) * 0.12, 0, 0.999);
+      pal = PAL[k[3]]; m = 0.35 + 0.9 * b; var w = b > 0.8 ? (b - 0.8) * 1.2 : 0;
+      sR = Math.min(255, pal[0] * m + 255 * w); sG = Math.min(255, pal[1] * m + 255 * w); sB = Math.min(255, pal[2] * m + 255 * w);
+      sc = RAMP.charAt(Math.floor(b * RAMP.length)); return;
+    }
+    for (i = 0; i < LEAVES.length; i++) {
+      k = LEAVES[i]; g = cl((t - (2.4 + i * 0.25)) / 1.2, 0, 1); if (g <= 0) continue; g = ease(g);
+      dx = xu - k[0]; dy = yu - k[1];
+      var ca = Math.cos(k[2]), sa = Math.sin(k[2]);
+      var u = (dx * ca + dy * sa) / (0.36 * g), v = (-dx * sa + dy * ca) / (0.14 * g);
+      if (u * u + v * v <= 1) {
+        var vein = Math.abs(v) < 0.14; b = vein ? 0.95 : 0.55 + hash(c, r) * 0.35;
+        sR = 30 * b; sG = 210 * b; sB = 80 * b;
+        sc = vein ? "|" : GREEN.charAt(Math.floor(hash(r, c) * GREEN.length)); return;
+      }
+    }
+    var ax = Math.abs(xu);
+    if (t > 7 && yu > 1.25 && yu < 1.46) {
+      g = ease(cl((t - 7) / 1.2, 0, 1));
+      var lobe = Math.pow((ax - 0.22 * g) / (0.13 * g + 0.001), 2) + Math.pow((yu - 1.35) / (0.07 * g + 0.001), 2) <= 1;
+      if (ax < 0.17 * g || lobe) { b = 0.7 + hash(c, r) * 0.3; sR = 235 * b; sG = 175 * b; sB = 45 * b; sc = "#="[hash(r, c) < 0.5 ? 0 : 1]; return; }
+    }
+    if (yu >= hY) {
+      if (yu > 1.2 && yu <= 1.9 && ax < 0.09) {
+        b = 0.6 + hash(c, r) * 0.4; sR = 40 * b; sG = 200 * b; sB = 90 * b;
+        sc = GREEN.charAt(Math.floor(hash(r, c + 5) * 7)); return;
+      }
+      if (yu >= -0.2 && yu <= 1.2) {
+        var hw = (1.2 - yu) * 0.77;
+        if (ax <= hw + 0.045) {
+          if (Math.abs(ax - hw) < 0.05) { sc = xu < 0 ? "/" : "\\"; sR = 190; sG = 190; sB = 205; return; }
+          var h = hash(c, r);
+          if (Math.abs(ax - hw * 0.5) < 0.025) { sc = "|"; sR = 120; sG = 120; sB = 135; return; }
+          if (h < 0.22) { sc = "."; sR = 110; sG = 110; sB = 125; return; }
+          if (h < 0.3) { sc = ":"; sR = 90; sG = 90; sB = 105; return; }
+        }
+      }
+    }
+  }
+
+  function put(c, r, chr, b) { if (c < 0 || r < 0 || c >= cols || r >= rows) return; var i = r * cols + c; sb[i] = b; sch[i] = chr; }
+  function buildStars(t) {
+    sb.fill(0); var i, s, tw;
+    for (i = 0; i < stars.length; i++) {
+      s = stars[i]; tw = 0.5 + 0.5 * Math.sin(t * s.s + s.p);
+      put(s.c, s.r, s.k < 0.6 ? "." : (s.k < 0.9 ? "+" : "*"), 0.2 + 0.7 * tw);
+    }
+    for (i = 0; i < sparks.length; i++) {
+      var p = sparks[i], pu = 0.5 + 0.5 * Math.sin(t * p.s + p.p), len = Math.round(pu * 4), k, b;
+      for (k = 1; k <= len; k++) { b = pu * (1 - k / 6); put(p.c + k, p.r, "-", b); put(p.c - k, p.r, "-", b); put(p.c, p.r + k, "|", b); put(p.c, p.r - k, "|", b); }
+      put(p.c, p.r, "+", 0.4 + 0.6 * pu);
+    }
+  }
+
+  var TEXTS = ["FOR YOU <3", "I LOVE YOU"];
+  function drawText(t) {
+    if (t < 9.3) return;
+    var tt = t - 9.3, per = 5, idx = Math.floor(tt / per) % TEXTS.length, local = tt % per, s = TEXTS[idx];
+    var n = Math.ceil(s.length * Math.min(1, local / 1.6)), alpha = local < 4.2 ? 1 : (per - local) / 0.8;
+    var size = Math.min(W / 14, 26), sp = size * 0.9, x0 = W / 2 - s.length * sp / 2 + sp / 2, y = Math.min(H * 0.92, cy + 2.45 * U);
+    ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
+    ctx.font = "bold " + size + "px ui-monospace, Menlo, Consolas, monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowColor = "#ff5c9a"; ctx.shadowBlur = 12;
+    for (var i = 0; i < n; i++) {
+      var chr = s.charAt(i); ctx.fillStyle = (chr === "<" || chr === "3") ? "#ff4d7e" : "#ffd9e6";
+      ctx.fillText(chr, x0 + i * sp, y);
+    }
+    ctx.restore();
+  }
+
+  var t0 = performance.now(), last = 0;
+  var bgm = document.getElementById("bgm"), startEl = document.getElementById("start");
+  function playBgm() { try { bgm.currentTime = 0; var p = bgm.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+
+  // Ganti isi catatan di bawah ini sesuka kamu
+  var NOTES = [
+    "Hai Nurul, halaman ini aku buat khusus untuk kamu.",
+    "Di antara semua bintang yang ada, aku tetap memilih kamu. Terima kasih sudah ada, sabar, dan jadi alasan aku tersenyum. I love you so much ♥"
+  ];
+  var nIdx = 0, noteEl = document.getElementById("note"), noteBtn = document.getElementById("noteBtn");
+  function showNote() {
+    document.getElementById("ntxt").textContent = NOTES[nIdx];
+    document.getElementById("ni").textContent = (nIdx + 1) + " / " + NOTES.length;
+  }
+  startEl.addEventListener("click", function () { setTimeout(function () { noteBtn.classList.add("show"); }, 9500); });
+  noteBtn.addEventListener("click", function () { nIdx = 0; showNote(); noteEl.classList.remove("hide"); });
+  document.getElementById("nx").addEventListener("click", function () { noteEl.classList.add("hide"); });
+  noteEl.addEventListener("click", function (e) { if (e.target === noteEl) noteEl.classList.add("hide"); });
+  document.getElementById("np").addEventListener("click", function () { nIdx = (nIdx + NOTES.length - 1) % NOTES.length; showNote(); });
+  document.getElementById("nn").addEventListener("click", function () { nIdx = (nIdx + 1) % NOTES.length; showNote(); });
+  startEl.addEventListener("click", function () { startEl.style.display = "none"; t0 = performance.now(); playBgm(); });
+  cv.addEventListener("click", function () { t0 = performance.now(); });
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (now - last < 32) return; last = now;
+    var t = (now - t0) / 1000;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#02020a"; ctx.fillRect(0, 0, W, H);
+    ctx.font = fs + "px ui-monospace, Menlo, Consolas, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    buildStars(t);
+    var hY = 1.9 - 2.1 * ease(cl(t / 4.5, 0, 1)), ph = t * 0.7, cur = "", r, c, style, v;
+    for (r = 0; r < rows; r++) {
+      var yu = ((r + 0.5) * ch - cy) / U;
+      for (c = 0; c < cols; c++) {
+        scene(c, r, ((c + 0.5) * cw - cx) / U, yu, t, hY, ph);
+        if (sc !== null) { style = "rgb(" + (sR | 0) + "," + (sG | 0) + "," + (sB | 0) + ")"; v = sc; }
+        else {
+          var bi = r * cols + c; if (sb[bi] <= 0.02) continue;
+          var q = Math.round(255 * sb[bi]); style = "rgb(" + q + "," + q + "," + Math.min(255, q + 20) + ")"; v = sch[bi];
+        }
+        if (style !== cur) { ctx.fillStyle = style; cur = style; }
+        ctx.fillText(v, (c + 0.5) * cw, (r + 0.5) * ch);
+      }
+    }
+    drawText(t);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
